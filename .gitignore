@@ -1,0 +1,22 @@
+# Dependency directories
+node_modules/
+
+# Expo auto-generated directories
+.expo/
+dist/
+web-build/
+
+# Build artifacts and local files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.eslintcache
+
+# Native mobile build folders (if generated later by prebuild)
+android/
+ios/
+
+# Local environment variables (Security configuration)
+.env
+.env.local
+.env.*.local
