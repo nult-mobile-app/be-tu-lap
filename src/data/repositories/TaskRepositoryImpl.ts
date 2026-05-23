@@ -46,7 +46,10 @@ export class TaskRepositoryImpl implements ITaskRepository {
       [dateKey, childId],
     );
 
-    return rows.map((row: TaskRow) => TaskModel.toDomain(row));
+    const safeRows = Array.isArray(rows) ? rows : [];
+    return safeRows
+      .map((row: TaskRow) => TaskModel.toDomain(row))
+      .filter((task): task is Task => task !== null);
   }
 
   public async completeTask(taskId: string, childId: string): Promise<void> {
@@ -125,13 +128,16 @@ export class TaskRepositoryImpl implements ITaskRepository {
       `,
       [childId],
     );
-    return rows.map((row) => ({
-      id: row.id,
-      taskId: row.task_id,
-      childId: row.child_id,
-      taskTitle: row.task_title,
-      completedAt: row.completed_at,
-    }));
+    const safeRows = Array.isArray(rows) ? rows : [];
+    return safeRows
+      .filter((row) => row !== null && row !== undefined)
+      .map((row) => ({
+        id: row.id,
+        taskId: row.task_id,
+        childId: row.child_id,
+        taskTitle: row.task_title,
+        completedAt: row.completed_at,
+      }));
   }
 
   public async addReward(
@@ -159,13 +165,16 @@ export class TaskRepositoryImpl implements ITaskRepository {
       "SELECT id, child_id, title, points_required, stock FROM rewards WHERE child_id = ? ORDER BY title ASC;",
       [childId],
     );
-    return rows.map((row) => ({
-      id: row.id,
-      childId: row.child_id,
-      title: row.title,
-      pointsRequired: row.points_required,
-      stock: row.stock,
-    }));
+    const safeRows = Array.isArray(rows) ? rows : [];
+    return safeRows
+      .filter((row) => row !== null && row !== undefined)
+      .map((row) => ({
+        id: row.id,
+        childId: row.child_id,
+        title: row.title,
+        pointsRequired: row.points_required,
+        stock: row.stock,
+      }));
   }
 
   public async redeemReward(childId: string, rewardId: string): Promise<void> {
@@ -186,9 +195,6 @@ export class TaskRepositoryImpl implements ITaskRepository {
         points_required: number;
         stock: number;
       };
-      if (reward.stock <= 0) {
-        throw new Error("Phần thưởng đã hết lượt đổi.");
-      }
 
       const childResult = await this.database.executeInTransaction(
         transaction,
@@ -204,11 +210,6 @@ export class TaskRepositoryImpl implements ITaskRepository {
         transaction,
         "UPDATE children SET total_stars = total_stars - ? WHERE id = ?;",
         [reward.points_required, childId],
-      );
-      await this.database.executeInTransaction(
-        transaction,
-        "UPDATE rewards SET stock = stock - 1 WHERE id = ? AND child_id = ?;",
-        [rewardId, childId],
       );
       await this.database.executeInTransaction(
         transaction,
@@ -230,13 +231,16 @@ export class TaskRepositoryImpl implements ITaskRepository {
       "SELECT id, child_id, reward_title, points_spent, redeemed_at FROM reward_logs WHERE child_id = ? ORDER BY redeemed_at DESC;",
       [childId],
     );
-    return rows.map((row) => ({
-      id: row.id,
-      childId: row.child_id,
-      rewardTitle: row.reward_title,
-      pointsSpent: row.points_spent,
-      redeemedAt: row.redeemed_at,
-    }));
+    const safeRows = Array.isArray(rows) ? rows : [];
+    return safeRows
+      .filter((row) => row !== null && row !== undefined)
+      .map((row) => ({
+        id: row.id,
+        childId: row.child_id,
+        rewardTitle: row.reward_title,
+        pointsSpent: row.points_spent,
+        redeemedAt: row.redeemed_at,
+      }));
   }
 
   private assertDate(date: Date): void {
@@ -253,4 +257,3 @@ export class TaskRepositoryImpl implements ITaskRepository {
     return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
   }
 }
-

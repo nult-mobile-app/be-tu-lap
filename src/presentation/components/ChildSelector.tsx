@@ -3,7 +3,7 @@ import { ScrollView, StyleSheet, Text, TouchableOpacity } from "react-native";
 import type { Child } from "../../domain/entities/Child";
 
 interface ChildSelectorProps {
-  children: Child[];
+  children: Child[] | null | undefined;
   selectedChildId: string | null;
   onSelectChild: (childId: string) => void;
 }
@@ -13,9 +13,11 @@ export function ChildSelector({
   selectedChildId,
   onSelectChild,
 }: ChildSelectorProps): React.JSX.Element {
+  const childList: Child[] = Array.isArray(children) ? children : [];
+
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-      {children.map((child: Child) => {
+      {childList.map((child: Child) => {
         const isSelected: boolean = child.id === selectedChildId;
 
         return (
@@ -69,4 +71,3 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
 });
-

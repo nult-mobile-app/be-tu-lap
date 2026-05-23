@@ -11,7 +11,10 @@ export interface TaskRow {
 }
 
 export class TaskModel {
-  public static toDomain(row: TaskRow): Task {
+  public static toDomain(row: TaskRow | null | undefined): Task | null {
+    if (!row) {
+      return null;
+    }
     return {
       id: row.id,
       childId: row.child_id,

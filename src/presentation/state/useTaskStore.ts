@@ -24,6 +24,7 @@ import { ChildRepositoryImpl } from "../../data/repositories/ChildRepositoryImpl
 import { TaskRepositoryImpl } from "../../data/repositories/TaskRepositoryImpl";
 
 interface TaskState {
+  parentPin: string | null;
   children: Child[];
   selectedChildId: string | null;
   tasks: Task[];
@@ -47,10 +48,13 @@ interface TaskState {
   loadHistoryAndRewards: (childId: string) => Promise<void>;
   addReward: (childId: string, title: string, pointsRequired: number) => Promise<void>;
   redeemReward: (childId: string, rewardId: string) => Promise<void>;
+  savePin: (pin: string) => void;
+  verifyPin: (pin: string) => boolean;
   clearError: () => void;
 }
 
 export const useTaskStore = create<TaskState>((set, get) => ({
+  parentPin: null,
   children: [],
   selectedChildId: null,
   tasks: [],
@@ -66,7 +70,8 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     set({ isLoading: true, errorMessage: null });
     try {
       const getChildrenUseCase: GetChildrenUseCase = createGetChildrenUseCase();
-      const children: Child[] = await getChildrenUseCase.execute();
+      const rawChildren: Child[] = await getChildrenUseCase.execute();
+      const children: Child[] = Array.isArray(rawChildren) ? rawChildren : [];
       const selectedChildId: string | null =
         get().selectedChildId ?? (children.length > 0 ? children[0].id : null);
 
@@ -114,13 +119,14 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
     try {
       const getTodayTasksUseCase: GetTodayTasksUseCase = createGetTodayTasksUseCase();
-      const tasks: Task[] = await getTodayTasksUseCase.execute(selectedChildId);
-      const children: Child[] = get().children;
+      const rawTasks: Task[] = await getTodayTasksUseCase.execute(selectedChildId);
+      const tasks: Task[] = Array.isArray(rawTasks) ? rawTasks : [];
+      const children: Child[] = Array.isArray(get().children) ? get().children : [];
 
       set({
         tasks,
         adminTasks: tasks,
-        taskLogs: get().taskLogs,
+        taskLogs: Array.isArray(get().taskLogs) ? get().taskLogs : [],
         totalStars: getTotalStarsFromChildren(children, selectedChildId),
         isLoading: false,
       });
@@ -145,17 +151,20 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       const completeTaskUseCase: CompleteTaskUseCase = createCompleteTaskUseCase();
       await completeTaskUseCase.execute(taskId, selectedChildId);
 
-      const updatedTasks: Task[] = get().tasks.map((task: Task) =>
-        task.id === taskId ? { ...task, isCompleted: true } : task,
+      const currentTasks = Array.isArray(get().tasks) ? get().tasks : [];
+      const updatedTasks: Task[] = currentTasks.map((task: Task) =>
+        task && task.id === taskId ? { ...task, isCompleted: true } : task,
       );
-      const completedTask: Task | undefined = updatedTasks.find((task) => task.id === taskId);
+      const completedTask: Task | undefined = updatedTasks.find((task) => task && task.id === taskId);
       const starsToAdd: number = completedTask !== undefined ? completedTask.points : 0;
-      const updatedChildren: Child[] = get().children.map((child: Child) =>
-        child.id === selectedChildId
+      const currentChildren = Array.isArray(get().children) ? get().children : [];
+      const updatedChildren: Child[] = currentChildren.map((child: Child) =>
+        child && child.id === selectedChildId
           ? { ...child, totalStars: child.totalStars + starsToAdd }
           : child,
       );
 
+      const currentLogs = Array.isArray(get().taskLogs) ? get().taskLogs : [];
       set({
         children: updatedChildren,
         tasks: updatedTasks,
@@ -168,7 +177,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
             taskTitle: completedTask?.title ?? "",
             completedAt: toDateKey(new Date()),
           },
-          ...get().taskLogs,
+          ...currentLogs,
         ],
         totalStars: getTotalStarsFromChildren(updatedChildren, selectedChildId),
         isLoading: false,
@@ -256,7 +265,8 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     set({ isLoading: true, errorMessage: null });
     try {
       const getTodayTasksUseCase: GetTodayTasksUseCase = createGetTodayTasksUseCase();
-      const tasks: Task[] = await getTodayTasksUseCase.execute(normalizedChildId);
+      const rawTasks: Task[] = await getTodayTasksUseCase.execute(normalizedChildId);
+      const tasks: Task[] = Array.isArray(rawTasks) ? rawTasks : [];
       set({ adminTasks: tasks, isLoading: false });
     } catch (error: unknown) {
       set({ isLoading: false, errorMessage: toReadableError(error) });
@@ -270,9 +280,11 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       await deleteTaskUseCase.execute(taskId, childId);
 
       const selectedChildId: string | null = get().selectedChildId;
-      const nextAdminTasks: Task[] = get().adminTasks.filter((task) => task.id !== taskId);
+      const currentAdminTasks = Array.isArray(get().adminTasks) ? get().adminTasks : [];
+      const nextAdminTasks: Task[] = currentAdminTasks.filter((task) => task && task.id !== taskId);
       if (selectedChildId === childId) {
-        const nextTasks: Task[] = get().tasks.filter((task) => task.id !== taskId);
+        const currentTasks = Array.isArray(get().tasks) ? get().tasks : [];
+        const nextTasks: Task[] = currentTasks.filter((task) => task && task.id !== taskId);
         set({
           tasks: nextTasks,
           adminTasks: nextAdminTasks,
@@ -297,11 +309,14 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       const getTaskLogsUseCase: GetTaskLogsUseCase = createGetTaskLogsUseCase();
       const getRewardsUseCase: GetRewardsUseCase = createGetRewardsUseCase();
       const getRewardLogsUseCase: GetRewardLogsUseCase = createGetRewardLogsUseCase();
-      const [taskLogs, rewards, rewardLogs] = await Promise.all([
+      const [rawTaskLogs, rawRewards, rawRewardLogs] = await Promise.all([
         getTaskLogsUseCase.execute(normalizedChildId),
         getRewardsUseCase.execute(normalizedChildId),
         getRewardLogsUseCase.execute(normalizedChildId),
       ]);
+      const taskLogs = Array.isArray(rawTaskLogs) ? rawTaskLogs : [];
+      const rewards = Array.isArray(rawRewards) ? rawRewards : [];
+      const rewardLogs = Array.isArray(rawRewardLogs) ? rawRewardLogs : [];
       set({ taskLogs, rewards, rewardLogs, isLoading: false });
     } catch (error: unknown) {
       set({ isLoading: false, errorMessage: toReadableError(error) });
@@ -331,6 +346,23 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     } catch (error: unknown) {
       set({ isLoading: false, errorMessage: toReadableError(error) });
     }
+  },
+
+  savePin: (pin: string): void => {
+    const normalizedPin: string = pin.trim();
+    if (/^\d{4}$/.test(normalizedPin)) {
+      set({ parentPin: normalizedPin });
+    } else {
+      set({ errorMessage: "Mã PIN phải gồm đúng 4 chữ số." });
+    }
+  },
+
+  verifyPin: (pin: string): boolean => {
+    const parentPin: string | null = get().parentPin;
+    if (parentPin === null) {
+      return false;
+    }
+    return parentPin === pin.trim();
   },
 
   clearError: (): void => {
@@ -424,12 +456,12 @@ function createRedeemRewardUseCase(): RedeemRewardUseCase {
   return new RedeemRewardUseCase(createTaskRepository());
 }
 
-function getTotalStarsFromChildren(children: Child[], selectedChildId: string | null): number {
-  if (selectedChildId === null) {
+function getTotalStarsFromChildren(children: Child[] | null | undefined, selectedChildId: string | null): number {
+  if (selectedChildId === null || !Array.isArray(children)) {
     return 0;
   }
 
-  const child: Child | undefined = children.find((item) => item.id === selectedChildId);
+  const child: Child | undefined = children.find((item) => item && item.id === selectedChildId);
   return child?.totalStars ?? 0;
 }
 

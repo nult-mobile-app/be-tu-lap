@@ -333,9 +333,15 @@ export class SQLiteDatabase {
     const raw: string | null = localStorage.getItem(STORAGE_KEY);
     if (raw === null) return;
     try {
-      const parsed: unknown = JSON.parse(raw);
+      const parsed: any = JSON.parse(raw);
       if (typeof parsed === "object" && parsed !== null) {
-        this.state = parsed as DatabaseState;
+        this.state = {
+          children: Array.isArray(parsed.children) ? parsed.children : [],
+          tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
+          task_logs: Array.isArray(parsed.task_logs) ? parsed.task_logs : [],
+          rewards: Array.isArray(parsed.rewards) ? parsed.rewards : [],
+          reward_logs: Array.isArray(parsed.reward_logs) ? parsed.reward_logs : [],
+        };
       }
     } catch {
       this.state = { children: [], tasks: [], task_logs: [], rewards: [], reward_logs: [] };

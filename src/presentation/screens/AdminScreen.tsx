@@ -22,19 +22,19 @@ const QUICK_AVATARS: readonly string[] = ["🦁", "🦊", "🐼", "🐯", "🐨"
 const QUICK_ICONS: readonly string[] = ["🪥", "📚", "🧸", "🧹", "🫧", "🥛"];
 
 export function AdminScreen({ onBackHome }: AdminScreenProps): React.JSX.Element {
-  const children: Child[] = useTaskStore((state) => state.children);
+  const children: Child[] = useTaskStore((state) => state.children ?? []);
   const isLoading: boolean = useTaskStore((state) => state.isLoading);
   const errorMessage: string | null = useTaskStore((state) => state.errorMessage);
-  const adminTasks: Task[] = useTaskStore((state) => state.adminTasks);
+  const adminTasks: Task[] = useTaskStore((state) => state.adminTasks ?? []);
   const addChild = useTaskStore((state) => state.addChild);
   const deleteChild = useTaskStore((state) => state.deleteChild);
   const createTask = useTaskStore((state) => state.createTask);
   const updateChildName = useTaskStore((state) => state.updateChildName);
   const fetchTasksForChild = useTaskStore((state) => state.fetchTasksForChild);
   const deleteTask = useTaskStore((state) => state.deleteTask);
-  const taskLogs = useTaskStore((state) => state.taskLogs);
-  const rewards = useTaskStore((state) => state.rewards);
-  const rewardLogs = useTaskStore((state) => state.rewardLogs);
+  const taskLogs = useTaskStore((state) => state.taskLogs ?? []);
+  const rewards = useTaskStore((state) => state.rewards ?? []);
+  const rewardLogs = useTaskStore((state) => state.rewardLogs ?? []);
   const loadHistoryAndRewards = useTaskStore((state) => state.loadHistoryAndRewards);
   const addReward = useTaskStore((state) => state.addReward);
   const redeemReward = useTaskStore((state) => state.redeemReward);
@@ -53,16 +53,17 @@ export function AdminScreen({ onBackHome }: AdminScreenProps): React.JSX.Element
   const [rewardPoints, setRewardPoints] = useState<string>("20");
 
   const selectedTaskChild: Child | undefined = useMemo(
-    () => children.find((child) => child.id === taskChildId),
+    () => (Array.isArray(children) ? children : []).find((child) => child && child.id === taskChildId),
     [children, taskChildId],
   );
 
   React.useEffect(() => {
-    if (children.length > 0 && taskChildId.length === 0) {
-      setTaskChildId(children[0].id);
+    const safeChildren = Array.isArray(children) ? children : [];
+    if (safeChildren.length > 0 && taskChildId.length === 0) {
+      setTaskChildId(safeChildren[0].id);
     }
-    if (children.length > 0 && rewardChildId.length === 0) {
-      setRewardChildId(children[0].id);
+    if (safeChildren.length > 0 && rewardChildId.length === 0) {
+      setRewardChildId(safeChildren[0].id);
     }
   }, [children, taskChildId, rewardChildId]);
 
@@ -134,21 +135,23 @@ export function AdminScreen({ onBackHome }: AdminScreenProps): React.JSX.Element
           {activeTab === "children" ? (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Danh sách bé hiện tại</Text>
-              {children.map((child: Child) => (
-                <View key={child.id} style={styles.childRow}>
-                  <View style={styles.childInfoCol}>
-                    <Text style={styles.childAvatarLabel}>{child.avatar}</Text>
-                    {editingChildId === child.id ? (
-                      <TextInput
-                        value={editingChildName}
-                        onChangeText={setEditingChildName}
-                        style={styles.inlineInput}
-                        placeholder="Tên mới của bé"
-                      />
-                    ) : (
-                      <Text style={styles.childRowText}>{`${child.name} (${child.totalStars} ⭐)`}</Text>
-                    )}
-                  </View>
+              {(Array.isArray(children) ? children : [])
+                .filter((child): child is Child => child !== null && child !== undefined)
+                .map((child: Child) => (
+                  <View key={child.id} style={styles.childRow}>
+                    <View style={styles.childInfoCol}>
+                      <Text style={styles.childAvatarLabel}>{child.avatar}</Text>
+                      {editingChildId === child.id ? (
+                        <TextInput
+                          value={editingChildName}
+                          onChangeText={setEditingChildName}
+                          style={styles.inlineInput}
+                          placeholder="Tên mới của bé"
+                        />
+                      ) : (
+                        <Text style={styles.childRowText}>{`${child.name} (${child.totalStars ?? 0} ⭐)`}</Text>
+                      )}
+                    </View>
 
                   {editingChildId === child.id ? (
                     <View style={styles.inlineActionRow}>
@@ -232,15 +235,17 @@ export function AdminScreen({ onBackHome }: AdminScreenProps): React.JSX.Element
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Chọn bé để thêm nhiệm vụ</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow}>
-                {children.map((child) => (
-                  <TouchableOpacity
-                    key={child.id}
-                    style={[styles.pill, taskChildId === child.id ? styles.pillActive : undefined]}
-                    onPress={(): void => setTaskChildId(child.id)}
-                  >
-                    <Text style={styles.pillText}>{`${child.avatar} ${child.name}`}</Text>
-                  </TouchableOpacity>
-                ))}
+                {(Array.isArray(children) ? children : [])
+                  .filter((child): child is Child => child !== null && child !== undefined)
+                  .map((child) => (
+                    <TouchableOpacity
+                      key={child.id}
+                      style={[styles.pill, taskChildId === child.id ? styles.pillActive : undefined]}
+                      onPress={(): void => setTaskChildId(child.id)}
+                    >
+                      <Text style={styles.pillText}>{`${child.avatar} ${child.name}`}</Text>
+                    </TouchableOpacity>
+                  ))}
               </ScrollView>
 
               <Text style={styles.helperText}>
@@ -288,41 +293,45 @@ export function AdminScreen({ onBackHome }: AdminScreenProps): React.JSX.Element
               <Text style={styles.sectionTitle}>
                 {`Danh sách nhiệm vụ hiện tại của ${selectedTaskChild?.name ?? "bé đã chọn"}`}
               </Text>
-              {adminTasks.length === 0 ? (
+              {!Array.isArray(adminTasks) || adminTasks.length === 0 ? (
                 <Text style={styles.emptyText}>Chưa có nhiệm vụ nào cho bé này.</Text>
               ) : (
-                adminTasks.map((task: Task) => (
-                  <View key={task.id} style={styles.taskRow}>
-                    <View style={styles.taskInfo}>
-                      <Text style={styles.taskTitle}>{`${task.icon} ${task.title}`}</Text>
-                      <Text style={styles.taskMeta}>{`+${task.points} ⭐`}</Text>
+                adminTasks
+                  .filter((task): task is Task => task !== null && task !== undefined)
+                  .map((task: Task) => (
+                    <View key={task.id} style={styles.taskRow}>
+                      <View style={styles.taskInfo}>
+                        <Text style={styles.taskTitle}>{`${task.icon} ${task.title}`}</Text>
+                        <Text style={styles.taskMeta}>{`+${task.points} ⭐`}</Text>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.deleteButton}
+                        onPress={(): void => {
+                          void deleteTask(task.id, task.childId);
+                        }}
+                        disabled={isLoading}
+                      >
+                        <Text style={styles.deleteButtonText}>🗑️ Xóa</Text>
+                      </TouchableOpacity>
                     </View>
-                    <TouchableOpacity
-                      style={styles.deleteButton}
-                      onPress={(): void => {
-                        void deleteTask(task.id, task.childId);
-                      }}
-                      disabled={isLoading}
-                    >
-                      <Text style={styles.deleteButtonText}>🗑️ Xóa</Text>
-                    </TouchableOpacity>
-                  </View>
-                ))
+                  ))
               )}
             </View>
           ) : (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Chọn bé</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow}>
-                {children.map((child) => (
-                  <TouchableOpacity
-                    key={child.id}
-                    style={[styles.pill, rewardChildId === child.id ? styles.pillActive : undefined]}
-                    onPress={(): void => setRewardChildId(child.id)}
-                  >
-                    <Text style={styles.pillText}>{`${child.avatar} ${child.name} (${child.totalStars} ⭐)`}</Text>
-                  </TouchableOpacity>
-                ))}
+                {(Array.isArray(children) ? children : [])
+                  .filter((child): child is Child => child !== null && child !== undefined)
+                  .map((child) => (
+                    <TouchableOpacity
+                      key={child.id}
+                      style={[styles.pill, rewardChildId === child.id ? styles.pillActive : undefined]}
+                      onPress={(): void => setRewardChildId(child.id)}
+                    >
+                      <Text style={styles.pillText}>{`${child.avatar} ${child.name} (${child.totalStars ?? 0} ⭐)`}</Text>
+                    </TouchableOpacity>
+                  ))}
               </ScrollView>
 
               <Text style={styles.sectionTitle}>Thêm phần thưởng</Text>
@@ -353,38 +362,52 @@ export function AdminScreen({ onBackHome }: AdminScreenProps): React.JSX.Element
 
               <Text style={styles.sectionTitle}>Danh sách phần thưởng</Text>
               <Text style={styles.balanceText}>
-                {`Số dư kho báu hiện tại của bé: ${children.find((c) => c.id === rewardChildId)?.totalStars ?? 0} ⭐`}
+                {`Số dư kho báu hiện tại của bé: ${(Array.isArray(children) ? children : []).find((c) => c && c.id === rewardChildId)?.totalStars ?? 0} ⭐`}
               </Text>
-              {rewards.map((reward) => {
-                const child = children.find((c) => c.id === rewardChildId);
-                const canRedeem: boolean = (child?.totalStars ?? 0) >= reward.pointsRequired && reward.stock > 0;
-                return (
-                  <View key={reward.id} style={styles.taskRow}>
-                    <View style={styles.taskInfo}>
-                      <Text style={styles.taskTitle}>{reward.title}</Text>
-                      <Text style={styles.taskMeta}>{`Cần: ${reward.pointsRequired} ⭐ | Lượt đổi còn lại: ${reward.stock}`}</Text>
+              {(Array.isArray(rewards) ? rewards : [])
+                .filter((reward) => reward !== null && reward !== undefined)
+                .map((reward) => {
+                  const safeChildren = Array.isArray(children) ? children : [];
+                  const child = safeChildren.find((c) => c && c.id === rewardChildId);
+                  const currentStars: number = Number(child?.totalStars ?? 0);
+                  const pointsRequired: number = Number(reward.pointsRequired ?? 0);
+                  const redeemableTurns: number =
+                    pointsRequired > 0 ? Math.floor(currentStars / pointsRequired) : 0;
+                  const canRedeem: boolean =
+                    Number.isFinite(currentStars) &&
+                    Number.isFinite(pointsRequired) &&
+                    currentStars >= pointsRequired;
+                  return (
+                    <View key={reward.id} style={styles.taskRow}>
+                      <View style={styles.taskInfo}>
+                        <Text style={styles.taskTitle}>{reward.title}</Text>
+                        <Text style={styles.taskMeta}>{`Cần: ${reward.pointsRequired} ⭐ | Lượt đổi còn lại: ${redeemableTurns}`}</Text>
+                      </View>
+                      <TouchableOpacity
+                        style={[styles.primaryButton, { paddingVertical: 8, paddingHorizontal: 10, marginTop: 0, opacity: canRedeem ? 1 : 0.5 }]}
+                        onPress={(): void => {
+                          void redeemReward(reward.childId, reward.id);
+                        }}
+                        disabled={!canRedeem || isLoading}
+                      >
+                        <Text style={styles.primaryButtonText}>Đổi quà</Text>
+                      </TouchableOpacity>
                     </View>
-                    <TouchableOpacity
-                      style={[styles.primaryButton, { paddingVertical: 8, paddingHorizontal: 10, marginTop: 0, opacity: canRedeem ? 1 : 0.5 }]}
-                      onPress={(): void => {
-                        void redeemReward(reward.childId, reward.id);
-                      }}
-                      disabled={!canRedeem || isLoading}
-                    >
-                      <Text style={styles.primaryButtonText}>Đổi quà</Text>
-                    </TouchableOpacity>
-                  </View>
-                );
-              })}
+                  );
+                })}
 
               <Text style={styles.sectionTitle}>Lịch sử hoàn thành nhiệm vụ</Text>
-              {taskLogs.map((log) => (
-                <Text key={log.id} style={styles.timelineText}>{`• ${log.completedAt}: ${log.taskTitle}`}</Text>
-              ))}
+              {(Array.isArray(taskLogs) ? taskLogs : [])
+                .filter((log) => log !== null && log !== undefined)
+                .map((log) => (
+                  <Text key={log.id} style={styles.timelineText}>{`• ${log.completedAt}: ${log.taskTitle}`}</Text>
+                ))}
               <Text style={styles.sectionTitle}>Lịch sử đổi quà</Text>
-              {rewardLogs.map((log) => (
-                <Text key={log.id} style={styles.timelineText}>{`• ${log.redeemedAt}: ${log.rewardTitle} (-${log.pointsSpent} ⭐)`}</Text>
-              ))}
+              {(Array.isArray(rewardLogs) ? rewardLogs : [])
+                .filter((log) => log !== null && log !== undefined)
+                .map((log) => (
+                  <Text key={log.id} style={styles.timelineText}>{`• ${log.redeemedAt}: ${log.rewardTitle} (-${log.pointsSpent} ⭐)`}</Text>
+                ))}
             </View>
           )}
         </ScrollView>

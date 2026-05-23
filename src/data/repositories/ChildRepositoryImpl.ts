@@ -18,12 +18,15 @@ export class ChildRepositoryImpl implements IChildRepository {
       "SELECT id, name, avatar, total_stars FROM children ORDER BY name ASC;",
     );
 
-    return rows.map((row: ChildRow) => ({
-      id: row.id,
-      name: row.name,
-      avatar: row.avatar,
-      totalStars: row.total_stars,
-    }));
+    const safeRows = Array.isArray(rows) ? rows : [];
+    return safeRows
+      .filter((row): row is ChildRow => row !== null && row !== undefined)
+      .map((row: ChildRow) => ({
+        id: row.id,
+        name: row.name,
+        avatar: row.avatar,
+        totalStars: row.total_stars,
+      }));
   }
 
   public async addChild(name: string, avatar: string): Promise<void> {
