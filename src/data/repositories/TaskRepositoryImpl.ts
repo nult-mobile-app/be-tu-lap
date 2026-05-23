@@ -141,36 +141,33 @@ export class TaskRepositoryImpl implements ITaskRepository {
   }
 
   public async addReward(
-    childId: string,
     title: string,
     pointsRequired: number,
     stock: number,
   ): Promise<void> {
     await this.database.initialize();
     await this.database.execute(
-      "INSERT INTO rewards (id, child_id, title, points_required, stock) VALUES (?, ?, ?, ?, ?);",
-      [this.makeId("reward"), childId, title, pointsRequired, stock],
+      "INSERT INTO rewards (id, title, points_required, stock) VALUES (?, ?, ?, ?);",
+      [this.makeId("reward"), title, pointsRequired, stock],
     );
   }
 
-  public async getRewardsByChild(childId: string): Promise<Reward[]> {
+  public async getAllRewards(): Promise<Reward[]> {
     await this.database.initialize();
     const rows = await this.database.query<{
       id: string;
-      child_id: string;
       title: string;
       points_required: number;
       stock: number;
     }>(
-      "SELECT id, child_id, title, points_required, stock FROM rewards WHERE child_id = ? ORDER BY title ASC;",
-      [childId],
+      "SELECT id, title, points_required, stock FROM rewards ORDER BY title ASC;",
+      [],
     );
     const safeRows = Array.isArray(rows) ? rows : [];
     return safeRows
       .filter((row) => row !== null && row !== undefined)
       .map((row) => ({
         id: row.id,
-        childId: row.child_id,
         title: row.title,
         pointsRequired: row.points_required,
         stock: row.stock,
@@ -184,8 +181,8 @@ export class TaskRepositoryImpl implements ITaskRepository {
     await this.database.transaction<void>(async (transaction) => {
       const rewardResult = await this.database.executeInTransaction(
         transaction,
-        "SELECT title, points_required, stock FROM rewards WHERE id = ? AND child_id = ? LIMIT 1;",
-        [rewardId, childId],
+        "SELECT title, points_required, stock FROM rewards WHERE id = ? LIMIT 1;",
+        [rewardId],
       );
       if (rewardResult.rows.length === 0) {
         throw new Error("Không tìm thấy phần thưởng.");

@@ -9,8 +9,8 @@ export interface ITaskRepository {
   createNewTask(childId: string, title: string, icon: string, points: number): Promise<void>;
   deleteTask(taskId: string, childId: string): Promise<void>;
   getTaskLogsByChild(childId: string): Promise<TaskLog[]>;
-  addReward(childId: string, title: string, pointsRequired: number, stock: number): Promise<void>;
-  getRewardsByChild(childId: string): Promise<Reward[]>;
+  addReward(title: string, pointsRequired: number, stock: number): Promise<void>;
+  getAllRewards(): Promise<Reward[]>;
   redeemReward(childId: string, rewardId: string): Promise<void>;
   getRewardLogsByChild(childId: string): Promise<RewardLog[]>;
 }

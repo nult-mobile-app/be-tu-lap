@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from "react";
 import {
+  Alert,
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -10,6 +12,7 @@ import {
 } from "react-native";
 import type { Child } from "../../domain/entities/Child";
 import type { Task } from "../../domain/entities/Task";
+import type { TaskTemplate } from "../../domain/entities/TaskTemplate";
 import { useTaskStore } from "../state/useTaskStore";
 
 interface AdminScreenProps {
@@ -38,11 +41,15 @@ export function AdminScreen({ onBackHome }: AdminScreenProps): React.JSX.Element
   const loadHistoryAndRewards = useTaskStore((state) => state.loadHistoryAndRewards);
   const addReward = useTaskStore((state) => state.addReward);
   const redeemReward = useTaskStore((state) => state.redeemReward);
+  const taskTemplates = useTaskStore((state) => state.taskTemplates ?? []);
+  const fetchTaskTemplates = useTaskStore((state) => state.fetchTaskTemplates);
+  const createTaskTemplate = useTaskStore((state) => state.createTaskTemplate);
+  const deleteTaskTemplate = useTaskStore((state) => state.deleteTaskTemplate);
 
   const [activeTab, setActiveTab] = useState<AdminTab>("children");
   const [childName, setChildName] = useState<string>("");
   const [childAvatar, setChildAvatar] = useState<string>(QUICK_AVATARS[0]);
-  const [taskChildId, setTaskChildId] = useState<string>("");
+  const [taskChildIds, setTaskChildIds] = useState<string[]>([]);
   const [taskTitle, setTaskTitle] = useState<string>("");
   const [taskIcon, setTaskIcon] = useState<string>(QUICK_ICONS[0]);
   const [taskPoints, setTaskPoints] = useState<string>("10");
@@ -52,26 +59,28 @@ export function AdminScreen({ onBackHome }: AdminScreenProps): React.JSX.Element
   const [rewardTitle, setRewardTitle] = useState<string>("");
   const [rewardPoints, setRewardPoints] = useState<string>("20");
 
-  const selectedTaskChild: Child | undefined = useMemo(
-    () => (Array.isArray(children) ? children : []).find((child) => child && child.id === taskChildId),
-    [children, taskChildId],
-  );
+  const handleSelectChild = (id: string): void => {
+    setTaskChildIds([id]);
+  };
 
   React.useEffect(() => {
     const safeChildren = Array.isArray(children) ? children : [];
-    if (safeChildren.length > 0 && taskChildId.length === 0) {
-      setTaskChildId(safeChildren[0].id);
+    if (safeChildren.length > 0 && taskChildIds.length === 0) {
+      setTaskChildIds([safeChildren[0].id]);
     }
     if (safeChildren.length > 0 && rewardChildId.length === 0) {
       setRewardChildId(safeChildren[0].id);
     }
-  }, [children, taskChildId, rewardChildId]);
+  }, [children, taskChildIds, rewardChildId]);
 
   React.useEffect(() => {
-    if (activeTab === "tasks" && taskChildId.length > 0) {
-      void fetchTasksForChild(taskChildId);
+    if (activeTab === "tasks") {
+      void fetchTaskTemplates();
+      if (taskChildIds.length === 1) {
+        void fetchTasksForChild(taskChildIds[0]);
+      }
     }
-  }, [activeTab, taskChildId, fetchTasksForChild]);
+  }, [activeTab, taskChildIds, fetchTasksForChild, fetchTaskTemplates]);
 
   React.useEffect(() => {
     if (activeTab === "history" && rewardChildId.length > 0) {
@@ -84,12 +93,59 @@ export function AdminScreen({ onBackHome }: AdminScreenProps): React.JSX.Element
     setChildName("");
   };
 
-  const handleCreateTask = async (): Promise<void> => {
+  const handleCreateTemplate = async (): Promise<void> => {
     const points: number = Number(taskPoints);
-    await createTask(taskChildId, taskTitle, taskIcon, points);
+    await createTaskTemplate(taskTitle, taskIcon, points);
     setTaskTitle("");
     setTaskPoints("10");
-    await fetchTasksForChild(taskChildId);
+  };
+
+  const handleAssignTemplate = async (template: TaskTemplate): Promise<void> => {
+    if (taskChildIds.length === 0) {
+      if (Platform.OS === "web") {
+        window.alert("Vui lòng chọn 1 bé để gán nhiệm vụ.");
+      } else {
+        Alert.alert("Lỗi", "Vui lòng chọn 1 bé để gán nhiệm vụ.");
+      }
+      return;
+    }
+
+    const cid = taskChildIds[0];
+
+    // Kiểm tra trùng lặp: bé đã có nhiệm vụ cùng tên chưa?
+    const isDuplicate = (Array.isArray(adminTasks) ? adminTasks : []).some(
+      (t) => t && t.childId === cid && t.title.trim().toLowerCase() === template.title.trim().toLowerCase(),
+    );
+    if (isDuplicate) {
+      const childName = (Array.isArray(children) ? children : []).find((c) => c && c.id === cid)?.name ?? "Bé";
+      const msg = `"${template.title}" đã được gán cho ${childName} rồi!`;
+      if (Platform.OS === "web") {
+        window.alert(msg);
+      } else {
+        Alert.alert("Nhiệm vụ đã tồn tại", msg);
+      }
+      return;
+    }
+
+    await createTask(cid, template.title, template.icon, template.points);
+    await fetchTasksForChild(cid);
+  };
+
+  const handleDeleteTemplate = async (id: string, title: string): Promise<void> => {
+    let shouldDelete = false;
+    if (Platform.OS === "web") {
+      shouldDelete = window.confirm(`Bạn có chắc muốn xóa nhiệm vụ mẫu "${title}" không?`);
+    } else {
+      shouldDelete = await new Promise((resolve) => {
+        Alert.alert("Xác nhận xóa", `Bạn có chắc muốn xóa nhiệm vụ mẫu "${title}" không?`, [
+          { text: "Hủy", style: "cancel", onPress: () => resolve(false) },
+          { text: "Xóa", style: "destructive", onPress: () => resolve(true) },
+        ]);
+      });
+    }
+    if (shouldDelete) {
+      await deleteTaskTemplate(id);
+    }
   };
 
   return (
@@ -192,7 +248,27 @@ export function AdminScreen({ onBackHome }: AdminScreenProps): React.JSX.Element
                       <TouchableOpacity
                         style={styles.deleteButton}
                         onPress={(): void => {
-                          void deleteChild(child.id);
+                          const msg = `Bạn có chắc muốn xóa "${child.name}"? Tất cả nhiệm vụ và lịch sử của bé cũng sẽ bị xóa.`;
+                          if (Platform.OS === "web") {
+                            if (window.confirm(msg)) {
+                              void deleteChild(child.id);
+                            }
+                          } else {
+                            Alert.alert(
+                              "Xác nhận xóa",
+                              msg,
+                              [
+                                { text: "Hủy", style: "cancel" },
+                                {
+                                  text: "Xóa",
+                                  style: "destructive",
+                                  onPress: (): void => {
+                                    void deleteChild(child.id);
+                                  },
+                                },
+                              ],
+                            );
+                          }
                         }}
                         disabled={isLoading}
                       >
@@ -233,15 +309,15 @@ export function AdminScreen({ onBackHome }: AdminScreenProps): React.JSX.Element
             </View>
           ) : activeTab === "tasks" ? (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Chọn bé để thêm nhiệm vụ</Text>
+              <Text style={styles.sectionTitle}>1. Chọn bé để gán nhiệm vụ & xem</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow}>
                 {(Array.isArray(children) ? children : [])
                   .filter((child): child is Child => child !== null && child !== undefined)
                   .map((child) => (
                     <TouchableOpacity
                       key={child.id}
-                      style={[styles.pill, taskChildId === child.id ? styles.pillActive : undefined]}
-                      onPress={(): void => setTaskChildId(child.id)}
+                      style={[styles.pill, taskChildIds.includes(child.id) ? styles.pillActive : undefined]}
+                      onPress={(): void => handleSelectChild(child.id)}
                     >
                       <Text style={styles.pillText}>{`${child.avatar} ${child.name}`}</Text>
                     </TouchableOpacity>
@@ -249,51 +325,19 @@ export function AdminScreen({ onBackHome }: AdminScreenProps): React.JSX.Element
               </ScrollView>
 
               <Text style={styles.helperText}>
-                {selectedTaskChild !== undefined
-                  ? `Đang thêm cho: ${selectedTaskChild.name}`
-                  : "Vui lòng tạo hoặc chọn một bé"}
+                {taskChildIds.length > 0
+                  ? `Đang chọn: ${taskChildIds.map((id) => (Array.isArray(children) ? children : []).find((c) => c && c.id === id)?.name).filter(Boolean).join(", ")}`
+                  : "Vui lòng chọn 1 bé để gán nhiệm vụ"}
               </Text>
-
-              <TextInput
-                placeholder="Tên nhiệm vụ (ví dụ: Đọc sách 15 phút)"
-                value={taskTitle}
-                onChangeText={setTaskTitle}
-                style={styles.input}
-              />
-              <TextInput
-                placeholder="Số sao"
-                value={taskPoints}
-                onChangeText={setTaskPoints}
-                keyboardType="number-pad"
-                style={styles.input}
-              />
-
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow}>
-                {QUICK_ICONS.map((icon) => (
-                  <TouchableOpacity
-                    key={icon}
-                    style={[styles.pill, taskIcon === icon ? styles.pillActive : undefined]}
-                    onPress={(): void => setTaskIcon(icon)}
-                  >
-                    <Text style={styles.pillText}>{icon}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-
-              <TouchableOpacity
-                style={styles.primaryButton}
-                onPress={(): void => {
-                  void handleCreateTask();
-                }}
-                disabled={isLoading || taskChildId.length === 0}
-              >
-                <Text style={styles.primaryButtonText}>Thêm nhiệm vụ</Text>
-              </TouchableOpacity>
 
               <Text style={styles.sectionTitle}>
-                {`Danh sách nhiệm vụ hiện tại của ${selectedTaskChild?.name ?? "bé đã chọn"}`}
+                {taskChildIds.length === 1
+                  ? `Danh sách nhiệm vụ riêng của ${(Array.isArray(children) ? children : []).find((c) => c && c.id === taskChildIds[0])?.name}`
+                  : "Danh sách nhiệm vụ (Vui lòng chọn 1 bé để xem)"}
               </Text>
-              {!Array.isArray(adminTasks) || adminTasks.length === 0 ? (
+              {taskChildIds.length !== 1 ? (
+                <Text style={styles.emptyText}>Chọn duy nhất 1 bé để xem và xóa nhiệm vụ.</Text>
+              ) : !Array.isArray(adminTasks) || adminTasks.length === 0 ? (
                 <Text style={styles.emptyText}>Chưa có nhiệm vụ nào cho bé này.</Text>
               ) : (
                 adminTasks
@@ -307,7 +351,27 @@ export function AdminScreen({ onBackHome }: AdminScreenProps): React.JSX.Element
                       <TouchableOpacity
                         style={styles.deleteButton}
                         onPress={(): void => {
-                          void deleteTask(task.id, task.childId);
+                          const msg = `Bạn có chắc muốn xóa nhiệm vụ "${task.title}"?`;
+                          if (Platform.OS === "web") {
+                            if (window.confirm(msg)) {
+                              void deleteTask(task.id, task.childId);
+                            }
+                          } else {
+                            Alert.alert(
+                              "Xác nhận xóa",
+                              msg,
+                              [
+                                { text: "Hủy", style: "cancel" },
+                                {
+                                  text: "Xóa",
+                                  style: "destructive",
+                                  onPress: (): void => {
+                                    void deleteTask(task.id, task.childId);
+                                  },
+                                },
+                              ],
+                            );
+                          }
                         }}
                         disabled={isLoading}
                       >
@@ -316,6 +380,71 @@ export function AdminScreen({ onBackHome }: AdminScreenProps): React.JSX.Element
                     </View>
                   ))
               )}
+
+              <Text style={[styles.sectionTitle, { borderTopWidth: 1, borderTopColor: "#EEE", paddingTop: 16, marginTop: 8 }]}>
+                2. Thư viện nhiệm vụ chung (Mẫu)
+              </Text>
+              
+              <TextInput
+                placeholder="Tên nhiệm vụ mẫu (ví dụ: Đọc sách)"
+                value={taskTitle}
+                onChangeText={setTaskTitle}
+                style={styles.input}
+              />
+              <TextInput
+                placeholder="Số sao"
+                value={taskPoints}
+                onChangeText={setTaskPoints}
+                keyboardType="number-pad"
+                style={styles.input}
+              />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow}>
+                {QUICK_ICONS.map((icon) => (
+                  <TouchableOpacity
+                    key={icon}
+                    style={[styles.pill, taskIcon === icon ? styles.pillActive : undefined]}
+                    onPress={(): void => setTaskIcon(icon)}
+                  >
+                    <Text style={styles.pillText}>{icon}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              <TouchableOpacity
+                style={styles.primaryButton}
+                onPress={(): void => {
+                  void handleCreateTemplate();
+                }}
+                disabled={isLoading || taskTitle.trim() === ""}
+              >
+                <Text style={styles.primaryButtonText}>Thêm nhiệm vụ vào Thư viện</Text>
+              </TouchableOpacity>
+
+              <View style={{ marginTop: 16, marginBottom: 24 }}>
+                {!Array.isArray(taskTemplates) || taskTemplates.length === 0 ? (
+                  <Text style={styles.emptyText}>Thư viện trống.</Text>
+                ) : (
+                  taskTemplates.map((template) => (
+                    <TouchableOpacity 
+                      key={template.id} 
+                      style={[styles.taskRow, { borderColor: "#4CAF50", borderWidth: 1 }]}
+                      onPress={(): void => { void handleAssignTemplate(template); }}
+                    >
+                      <View style={styles.taskInfo}>
+                        <Text style={styles.taskTitle}>{`${template.icon} ${template.title}`}</Text>
+                        <Text style={styles.taskMeta}>{`+${template.points} ⭐ (Bấm để gán)`}</Text>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.deleteButton}
+                        onPress={(): void => {
+                          void handleDeleteTemplate(template.id, template.title);
+                        }}
+                      >
+                        <Text style={styles.deleteButtonText}>Xóa</Text>
+                      </TouchableOpacity>
+                    </TouchableOpacity>
+                  ))
+                )}
+              </View>
             </View>
           ) : (
             <View style={styles.section}>
@@ -351,11 +480,11 @@ export function AdminScreen({ onBackHome }: AdminScreenProps): React.JSX.Element
               <TouchableOpacity
                 style={styles.primaryButton}
                 onPress={(): void => {
-                  void addReward(rewardChildId, rewardTitle, Number(rewardPoints));
+                  void addReward(rewardTitle, Number(rewardPoints));
                   setRewardTitle("");
                   setRewardPoints("20");
                 }}
-                disabled={isLoading || rewardChildId.length === 0}
+                disabled={isLoading || rewardTitle.trim() === ""}
               >
                 <Text style={styles.primaryButtonText}>Thêm phần thưởng</Text>
               </TouchableOpacity>
@@ -386,7 +515,7 @@ export function AdminScreen({ onBackHome }: AdminScreenProps): React.JSX.Element
                       <TouchableOpacity
                         style={[styles.primaryButton, { paddingVertical: 8, paddingHorizontal: 10, marginTop: 0, opacity: canRedeem ? 1 : 0.5 }]}
                         onPress={(): void => {
-                          void redeemReward(reward.childId, reward.id);
+                          void redeemReward(rewardChildId, reward.id);
                         }}
                         disabled={!canRedeem || isLoading}
                       >

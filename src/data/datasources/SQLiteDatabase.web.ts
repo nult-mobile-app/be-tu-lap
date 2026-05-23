@@ -23,7 +23,6 @@ interface TaskLogRecord {
 }
 interface RewardRecord {
   id: string;
-  child_id: string;
   title: string;
   points_required: number;
   stock: number;
@@ -35,6 +34,13 @@ interface RewardLogRecord {
   points_spent: number;
   redeemed_at: string;
 }
+interface TaskTemplateRecord {
+  id: string;
+  title: string;
+  icon: string;
+  points: number;
+  description: string;
+}
 
 interface DatabaseState {
   children: ChildRecord[];
@@ -42,6 +48,7 @@ interface DatabaseState {
   task_logs: TaskLogRecord[];
   rewards: RewardRecord[];
   reward_logs: RewardLogRecord[];
+  task_templates: TaskTemplateRecord[];
 }
 
 interface WebRows<T> {
@@ -67,6 +74,7 @@ export class SQLiteDatabase {
     task_logs: [],
     rewards: [],
     reward_logs: [],
+    task_templates: [],
   };
 
   public static getInstance(): SQLiteDatabase {
@@ -119,6 +127,27 @@ export class SQLiteDatabase {
     if (sql.startsWith("CREATE TABLE IF NOT EXISTS")) return rs([], 0);
     if (sql.startsWith("SELECT COUNT(1) AS total FROM children")) return rs([{ total: this.state.children.length }], 0);
     if (sql.startsWith("SELECT COUNT(1) AS total FROM tasks")) return rs([{ total: this.state.tasks.length }], 0);
+
+    // --- task_templates ---
+    if (sql.startsWith("SELECT id, title, icon, points, description FROM task_templates")) {
+      return rs(this.state.task_templates.slice().sort((a, b) => a.title.localeCompare(b.title)), 0);
+    }
+    if (sql.startsWith("INSERT INTO task_templates")) {
+      this.state.task_templates.push({
+        id: asString(params[0]),
+        title: asString(params[1]),
+        icon: asString(params[2]),
+        points: asNumber(params[3]),
+        description: "",
+      });
+      return rs([], 1);
+    }
+    if (sql.startsWith("DELETE FROM task_templates WHERE id = ?")) {
+      const id: string = asString(params[0]);
+      const before: number = this.state.task_templates.length;
+      this.state.task_templates = this.state.task_templates.filter((t) => t.id !== id);
+      return rs([], before - this.state.task_templates.length);
+    }
 
     if (sql.startsWith("SELECT id, name, avatar, total_stars FROM children")) {
       return rs(this.state.children.slice().sort((a, b) => a.name.localeCompare(b.name)), 0);
@@ -266,29 +295,25 @@ export class SQLiteDatabase {
     if (sql.startsWith("INSERT INTO rewards")) {
       this.state.rewards.push({
         id: asString(params[0]),
-        child_id: asString(params[1]),
-        title: asString(params[2]),
-        points_required: asNumber(params[3]),
-        stock: asNumber(params[4]),
+        title: asString(params[1]),
+        points_required: asNumber(params[2]),
+        stock: asNumber(params[3]),
       });
       return rs([], 1);
     }
-    if (sql.startsWith("SELECT id, child_id, title, points_required, stock FROM rewards WHERE child_id = ?")) {
-      const childId: string = asString(params[0]);
-      const rows = this.state.rewards.filter((r) => r.child_id === childId).sort((a, b) => a.title.localeCompare(b.title));
+    if (sql.startsWith("SELECT id, title, points_required, stock FROM rewards")) {
+      const rows = this.state.rewards.slice().sort((a, b) => a.title.localeCompare(b.title));
       return rs(rows, 0);
     }
-    if (sql.startsWith("SELECT title, points_required, stock FROM rewards WHERE id = ? AND child_id = ?")) {
+    if (sql.startsWith("SELECT title, points_required, stock FROM rewards WHERE id = ?")) {
       const rewardId: string = asString(params[0]);
-      const childId: string = asString(params[1]);
-      const found = this.state.rewards.find((r) => r.id === rewardId && r.child_id === childId);
+      const found = this.state.rewards.find((r) => r.id === rewardId);
       return rs(found ? [{ title: found.title, points_required: found.points_required, stock: found.stock }] : [], 0);
     }
-    if (sql.startsWith("UPDATE rewards SET stock = stock - 1 WHERE id = ? AND child_id = ?")) {
+    if (sql.startsWith("UPDATE rewards SET stock = stock - 1 WHERE id = ?")) {
       const rewardId: string = asString(params[0]);
-      const childId: string = asString(params[1]);
       this.state.rewards = this.state.rewards.map((r) =>
-        r.id === rewardId && r.child_id === childId ? { ...r, stock: Math.max(0, r.stock - 1) } : r,
+        r.id === rewardId ? { ...r, stock: Math.max(0, r.stock - 1) } : r,
       );
       return rs([], 1);
     }
@@ -318,12 +343,12 @@ export class SQLiteDatabase {
         { id: "child-tue-lam", name: "Bé Tuệ Lâm", avatar: "🦊", total_stars: 0 },
       ];
     }
-    if (this.state.tasks.length === 0) {
-      this.state.tasks = [
-        { id: "task-gb-1", child_id: "child-gia-bao", title: "Đánh răng buổi sáng", icon: "🪥", points: 10, description: "" },
-        { id: "task-gb-2", child_id: "child-gia-bao", title: "Xếp chăn gối", icon: "🛏️", points: 8, description: "" },
-        { id: "task-tl-1", child_id: "child-tue-lam", title: "Dọn đồ chơi", icon: "🧸", points: 12, description: "" },
-        { id: "task-tl-2", child_id: "child-tue-lam", title: "Rửa tay trước ăn", icon: "🫧", points: 6, description: "" },
+    if (this.state.task_templates.length === 0 && this.state.tasks.length === 0) {
+      this.state.task_templates = [
+        { id: "tpl-1", title: "Đánh răng buổi sáng", icon: "🪥", points: 10, description: "" },
+        { id: "tpl-2", title: "Xếp chăn gối", icon: "🛏️", points: 8, description: "" },
+        { id: "tpl-3", title: "Dọn đồ chơi", icon: "🧸", points: 12, description: "" },
+        { id: "tpl-4", title: "Rửa tay trước ăn", icon: "🫧", points: 6, description: "" },
       ];
     }
   }
@@ -341,10 +366,11 @@ export class SQLiteDatabase {
           task_logs: Array.isArray(parsed.task_logs) ? parsed.task_logs : [],
           rewards: Array.isArray(parsed.rewards) ? parsed.rewards : [],
           reward_logs: Array.isArray(parsed.reward_logs) ? parsed.reward_logs : [],
+          task_templates: Array.isArray(parsed.task_templates) ? parsed.task_templates : [],
         };
       }
     } catch {
-      this.state = { children: [], tasks: [], task_logs: [], rewards: [], reward_logs: [] };
+      this.state = { children: [], tasks: [], task_logs: [], rewards: [], reward_logs: [], task_templates: [] };
     }
   }
 

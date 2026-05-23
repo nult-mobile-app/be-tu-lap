@@ -19,9 +19,14 @@ import { GetTaskLogsUseCase } from "../../domain/usecases/GetTaskLogsUseCase";
 import { GetTodayTasksUseCase } from "../../domain/usecases/GetTodayTasksUseCase";
 import { RedeemRewardUseCase } from "../../domain/usecases/RedeemRewardUseCase";
 import { UpdateChildNameUseCase } from "../../domain/usecases/UpdateChildNameUseCase";
+import type { TaskTemplate } from "../../domain/entities/TaskTemplate";
+import { FetchTaskTemplatesUseCase } from "../../domain/usecases/TaskTemplates/FetchTaskTemplatesUseCase";
+import { CreateTaskTemplateUseCase } from "../../domain/usecases/TaskTemplates/CreateTaskTemplateUseCase";
+import { DeleteTaskTemplateUseCase } from "../../domain/usecases/TaskTemplates/DeleteTaskTemplateUseCase";
 import { SQLiteDatabase } from "../../data/datasources/SQLiteDatabase";
 import { ChildRepositoryImpl } from "../../data/repositories/ChildRepositoryImpl";
 import { TaskRepositoryImpl } from "../../data/repositories/TaskRepositoryImpl";
+import { TaskTemplateRepositoryImpl } from "../../data/repositories/TaskTemplateRepositoryImpl";
 
 interface TaskState {
   parentPin: string | null;
@@ -46,11 +51,16 @@ interface TaskState {
   fetchTasksForChild: (childId: string) => Promise<void>;
   deleteTask: (taskId: string, childId: string) => Promise<void>;
   loadHistoryAndRewards: (childId: string) => Promise<void>;
-  addReward: (childId: string, title: string, pointsRequired: number) => Promise<void>;
+  addReward: (title: string, pointsRequired: number) => Promise<void>;
   redeemReward: (childId: string, rewardId: string) => Promise<void>;
+  fetchAllRewards: () => Promise<void>;
   savePin: (pin: string) => void;
   verifyPin: (pin: string) => boolean;
   clearError: () => void;
+  taskTemplates: TaskTemplate[];
+  fetchTaskTemplates: () => Promise<void>;
+  createTaskTemplate: (title: string, icon: string, points: number, description?: string) => Promise<void>;
+  deleteTaskTemplate: (id: string) => Promise<void>;
 }
 
 export const useTaskStore = create<TaskState>((set, get) => ({
@@ -62,6 +72,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   taskLogs: [],
   rewards: [],
   rewardLogs: [],
+  taskTemplates: [],
   totalStars: 0,
   isLoading: false,
   errorMessage: null,
@@ -311,7 +322,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       const getRewardLogsUseCase: GetRewardLogsUseCase = createGetRewardLogsUseCase();
       const [rawTaskLogs, rawRewards, rawRewardLogs] = await Promise.all([
         getTaskLogsUseCase.execute(normalizedChildId),
-        getRewardsUseCase.execute(normalizedChildId),
+        getRewardsUseCase.execute(),
         getRewardLogsUseCase.execute(normalizedChildId),
       ]);
       const taskLogs = Array.isArray(rawTaskLogs) ? rawTaskLogs : [];
@@ -323,12 +334,17 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     }
   },
 
-  addReward: async (childId: string, title: string, pointsRequired: number): Promise<void> => {
+  addReward: async (title: string, pointsRequired: number): Promise<void> => {
     set({ isLoading: true, errorMessage: null });
     try {
       const addRewardUseCase: AddRewardUseCase = createAddRewardUseCase();
-      await addRewardUseCase.execute(childId, title, pointsRequired, 1);
-      await get().loadHistoryAndRewards(childId);
+      await addRewardUseCase.execute(title, pointsRequired, 1);
+      const childId = get().selectedChildId;
+      if (childId) {
+        await get().loadHistoryAndRewards(childId);
+      } else {
+        await get().fetchAllRewards();
+      }
       set({ isLoading: false });
     } catch (error: unknown) {
       set({ isLoading: false, errorMessage: toReadableError(error) });
@@ -343,6 +359,18 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       await get().fetchChildren();
       await get().loadHistoryAndRewards(childId);
       set({ isLoading: false });
+    } catch (error: unknown) {
+      set({ isLoading: false, errorMessage: toReadableError(error) });
+    }
+  },
+
+  fetchAllRewards: async (): Promise<void> => {
+    set({ isLoading: true, errorMessage: null });
+    try {
+      const getRewardsUseCase: GetRewardsUseCase = createGetRewardsUseCase();
+      const rawRewards: Reward[] = await getRewardsUseCase.execute();
+      const rewards = Array.isArray(rawRewards) ? rawRewards : [];
+      set({ rewards, isLoading: false });
     } catch (error: unknown) {
       set({ isLoading: false, errorMessage: toReadableError(error) });
     }
@@ -367,6 +395,39 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
   clearError: (): void => {
     set({ errorMessage: null });
+  },
+
+  fetchTaskTemplates: async (): Promise<void> => {
+    set({ isLoading: true, errorMessage: null });
+    try {
+      const usecase = createTaskTemplateUseCaseFetch();
+      const templates = await usecase.execute();
+      set({ taskTemplates: Array.from(templates), isLoading: false });
+    } catch (error: unknown) {
+      set({ isLoading: false, errorMessage: toReadableError(error) });
+    }
+  },
+
+  createTaskTemplate: async (title: string, icon: string, points: number, description: string = ""): Promise<void> => {
+    set({ isLoading: true, errorMessage: null });
+    try {
+      const usecase = createTaskTemplateUseCaseCreate();
+      await usecase.execute(title, icon, points, description);
+      await get().fetchTaskTemplates();
+    } catch (error: unknown) {
+      set({ isLoading: false, errorMessage: toReadableError(error) });
+    }
+  },
+
+  deleteTaskTemplate: async (id: string): Promise<void> => {
+    set({ isLoading: true, errorMessage: null });
+    try {
+      const usecase = createTaskTemplateUseCaseDelete();
+      await usecase.execute(id);
+      await get().fetchTaskTemplates();
+    } catch (error: unknown) {
+      set({ isLoading: false, errorMessage: toReadableError(error) });
+    }
   },
 }));
 
@@ -467,4 +528,24 @@ function getTotalStarsFromChildren(children: Child[] | null | undefined, selecte
 
 function toDateKey(date: Date): string {
   return `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, "0")}-${`${date.getDate()}`.padStart(2, "0")}`;
+}
+
+function createTaskTemplateRepository(): TaskTemplateRepositoryImpl {
+  const database: SQLiteDatabase = SQLiteDatabase.getInstance();
+  if (database === null || database === undefined) {
+    throw new Error("Không thể khởi tạo database instance.");
+  }
+  return new TaskTemplateRepositoryImpl(database);
+}
+
+function createTaskTemplateUseCaseFetch(): FetchTaskTemplatesUseCase {
+  return new FetchTaskTemplatesUseCase(createTaskTemplateRepository());
+}
+
+function createTaskTemplateUseCaseCreate(): CreateTaskTemplateUseCase {
+  return new CreateTaskTemplateUseCase(createTaskTemplateRepository());
+}
+
+function createTaskTemplateUseCaseDelete(): DeleteTaskTemplateUseCase {
+  return new DeleteTaskTemplateUseCase(createTaskTemplateRepository());
 }
