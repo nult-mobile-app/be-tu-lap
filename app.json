@@ -9,6 +9,7 @@
       "supportsTablet": true
     },
     "web": {
+      "name": "Smart Kids Diary",
       "favicon": "./public/favicon.ico",
       "bundler": "metro"
     }
