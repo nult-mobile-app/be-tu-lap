@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "Smart Kids Diary",
+    "slug": "smart-kids-diary",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "web": {
+      "favicon": "./public/favicon.ico",
+      "bundler": "metro"
+    }
+  }
+}
