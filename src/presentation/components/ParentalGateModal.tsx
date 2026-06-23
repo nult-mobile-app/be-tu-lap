@@ -23,7 +23,7 @@ export function ParentalGateModal({
   onSuccess,
 }: ParentalGateModalProps): React.JSX.Element {
   const parentPin: string | null = useTaskStore((state) => state.parentPin);
-  const savePin: (pin: string) => void = useTaskStore((state) => state.savePin);
+  const savePin: (pin: string) => Promise<void> = useTaskStore((state) => state.savePin);
   const verifyPin: (pin: string) => boolean = useTaskStore((state) => state.verifyPin);
 
   const [pin, setPin] = useState<string>("");
@@ -87,7 +87,7 @@ export function ParentalGateModal({
         setError("Xác nhận PIN không khớp.");
         return;
       }
-      savePin(pin);
+      void savePin(pin);
       setPin("");
       setConfirmPin("");
       setError(null);

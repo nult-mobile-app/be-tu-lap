@@ -28,6 +28,7 @@ export function HomeScreen({ onOpenAdmin }: HomeScreenProps): React.JSX.Element 
   const isLoading: boolean = useTaskStore((state) => state.isLoading);
   const errorMessage: string | null = useTaskStore((state) => state.errorMessage);
   const fetchChildren: () => Promise<void> = useTaskStore((state) => state.fetchChildren);
+  const loadPin: () => Promise<void> = useTaskStore((state) => state.loadPin);
   const selectChild: (childId: string) => Promise<void> = useTaskStore((state) => state.selectChild);
   const completeTask: (taskId: string) => Promise<void> = useTaskStore(
     (state) => state.completeTask,
@@ -35,7 +36,8 @@ export function HomeScreen({ onOpenAdmin }: HomeScreenProps): React.JSX.Element 
 
   useEffect(() => {
     void fetchChildren();
-  }, [fetchChildren]);
+    void loadPin();
+  }, [fetchChildren, loadPin]);
 
   return (
     <SafeAreaView style={styles.safeArea}>

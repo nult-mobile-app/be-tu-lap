@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
 import type { Child } from "../../domain/entities/Child";
 import type { Reward } from "../../domain/entities/Reward";
 import type { RewardLog } from "../../domain/entities/RewardLog";
@@ -54,7 +56,8 @@ interface TaskState {
   addReward: (title: string, pointsRequired: number) => Promise<void>;
   redeemReward: (childId: string, rewardId: string) => Promise<void>;
   fetchAllRewards: () => Promise<void>;
-  savePin: (pin: string) => void;
+  savePin: (pin: string) => Promise<void>;
+  loadPin: () => Promise<void>;
   verifyPin: (pin: string) => boolean;
   clearError: () => void;
   taskTemplates: TaskTemplate[];
@@ -63,7 +66,34 @@ interface TaskState {
   deleteTaskTemplate: (id: string) => Promise<void>;
 }
 
-export const useTaskStore = create<TaskState>((set, get) => ({
+const PIN_STORAGE_KEY = "smart-kids-diary-pin";
+
+/** Read PIN from the appropriate storage (web vs native). */
+async function readPinFromStorage(): Promise<string | null> {
+  try {
+    if (Platform.OS === "web") {
+      return localStorage.getItem(PIN_STORAGE_KEY);
+    }
+    return await AsyncStorage.getItem(PIN_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** Write PIN to the appropriate storage (web vs native). */
+async function writePinToStorage(pin: string): Promise<void> {
+  try {
+    if (Platform.OS === "web") {
+      localStorage.setItem(PIN_STORAGE_KEY, pin);
+    } else {
+      await AsyncStorage.setItem(PIN_STORAGE_KEY, pin);
+    }
+  } catch {
+    // Swallow storage errors – PIN will still work in-session.
+  }
+}
+
+export const useTaskStore = create<TaskState>()((set, get) => ({
   parentPin: null,
   children: [],
   selectedChildId: null,
@@ -376,12 +406,20 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     }
   },
 
-  savePin: (pin: string): void => {
+  savePin: async (pin: string): Promise<void> => {
     const normalizedPin: string = pin.trim();
     if (/^\d{4}$/.test(normalizedPin)) {
       set({ parentPin: normalizedPin });
+      await writePinToStorage(normalizedPin);
     } else {
       set({ errorMessage: "Mã PIN phải gồm đúng 4 chữ số." });
+    }
+  },
+
+  loadPin: async (): Promise<void> => {
+    const stored: string | null = await readPinFromStorage();
+    if (stored !== null && /^\d{4}$/.test(stored)) {
+      set({ parentPin: stored });
     }
   },
 
