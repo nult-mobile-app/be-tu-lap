@@ -11,6 +11,7 @@ import {
 import type { Child } from "../../domain/entities/Child";
 import type { Task } from "../../domain/entities/Task";
 import { ChildSelector } from "../components/ChildSelector";
+import { DonateModal } from "../components/DonateModal";
 import { ParentalGateModal } from "../components/ParentalGateModal";
 import { TaskCard } from "../components/TaskCard";
 import { useTaskStore } from "../state/useTaskStore";
@@ -21,6 +22,7 @@ interface HomeScreenProps {
 
 export function HomeScreen({ onOpenAdmin }: HomeScreenProps): React.JSX.Element {
   const [isGateVisible, setIsGateVisible] = useState<boolean>(false);
+  const [isDonateVisible, setIsDonateVisible] = useState<boolean>(false);
   const children: Child[] = useTaskStore((state) => state.children ?? []);
   const selectedChildId: string | null = useTaskStore((state) => state.selectedChildId);
   const tasks: Task[] = useTaskStore((state) => state.tasks ?? []);
@@ -45,13 +47,22 @@ export function HomeScreen({ onOpenAdmin }: HomeScreenProps): React.JSX.Element 
         <View style={styles.header}>
           <View style={styles.headerTop}>
             <Text style={styles.appName}>Bé Tự Lập</Text>
-            <TouchableOpacity
-              style={styles.adminButton}
-              onPress={(): void => setIsGateVisible(true)}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.adminButtonText}>⚙️ Chế độ bố mẹ</Text>
-            </TouchableOpacity>
+            <View style={styles.headerActions}>
+              <TouchableOpacity
+                style={styles.donateButton}
+                onPress={(): void => setIsDonateVisible(true)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.donateButtonText}>☕ Mời Cafe</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.adminButton}
+                onPress={(): void => setIsGateVisible(true)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.adminButtonText}>⚙️ Bố mẹ</Text>
+              </TouchableOpacity>
+            </View>
           </View>
           <Text style={styles.starVault}>{`Kho báu của bé: ${totalStars ?? 0} ⭐`}</Text>
           <ChildSelector
@@ -103,6 +114,10 @@ export function HomeScreen({ onOpenAdmin }: HomeScreenProps): React.JSX.Element 
           onOpenAdmin();
         }}
       />
+      <DonateModal
+        isVisible={isDonateVisible}
+        onClose={(): void => setIsDonateVisible(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -141,6 +156,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 8,
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  donateButton: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: "#FEF3C7",
+    borderWidth: 1,
+    borderColor: "#FCD34D",
+  },
+  donateButtonText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#92400E",
   },
   appName: {
     fontSize: 24,
